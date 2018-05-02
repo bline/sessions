@@ -55,6 +55,8 @@ type Session interface {
 	Options(Options)
 	// Save saves all sessions used during the current request.
 	Save() error
+	// The connected underlining session
+	Session(bool) *sessions.Session
 }
 
 func Sessions(name string, store Store) gin.HandlerFunc {
@@ -76,37 +78,37 @@ type session struct {
 }
 
 func (s *session) Get(key interface{}) interface{} {
-	return s.Session().Values[key]
+	return s.Session(false).Values[key]
 }
 
 func (s *session) Set(key interface{}, val interface{}) {
-	s.Session().Values[key] = val
+	s.Session(false).Values[key] = val
 	s.written = true
 }
 
 func (s *session) Delete(key interface{}) {
-	delete(s.Session().Values, key)
+	delete(s.Session(false).Values, key)
 	s.written = true
 }
 
 func (s *session) Clear() {
-	for key := range s.Session().Values {
+	for key := range s.Session(false).Values {
 		s.Delete(key)
 	}
 }
 
 func (s *session) AddFlash(value interface{}, vars ...string) {
-	s.Session().AddFlash(value, vars...)
+	s.Session(false).AddFlash(value, vars...)
 	s.written = true
 }
 
 func (s *session) Flashes(vars ...string) []interface{} {
 	s.written = true
-	return s.Session().Flashes(vars...)
+	return s.Session(false).Flashes(vars...)
 }
 
 func (s *session) Options(options Options) {
-	s.Session().Options = &sessions.Options{
+	s.Session(false).Options = &sessions.Options{
 		Path:     options.Path,
 		Domain:   options.Domain,
 		MaxAge:   options.MaxAge,
@@ -117,7 +119,7 @@ func (s *session) Options(options Options) {
 
 func (s *session) Save() error {
 	if s.Written() {
-		e := s.Session().Save(s.request, s.writer)
+		e := s.Session(false).Save(s.request, s.writer)
 		if e == nil {
 			s.written = false
 		}
@@ -126,8 +128,8 @@ func (s *session) Save() error {
 	return nil
 }
 
-func (s *session) Session() *sessions.Session {
-	if s.session == nil {
+func (s *session) Session(force bool) *sessions.Session {
+	if s.session == nil || force {
 		var err error
 		s.session, err = s.store.Get(s.request, s.name)
 		if err != nil {
